@@ -504,7 +504,7 @@ fn sign_psbt_schnorr(
         Some(_) => keypair, // no tweak for script spend
     };
 
-    let sig = secp.sign_schnorr(
+    let sig = secp.sign_schnorr_no_aux_rand(
         &Message::from_slice(&hash.into_inner()[..]).unwrap(),
         &keypair,
     );
