@@ -73,7 +73,10 @@ use crate::types::*;
 use crate::wallet::coin_selection::Excess::{Change, NoChange};
 
 const CACHE_ADDR_BATCH_SIZE: u32 = 100;
+#[cfg(not(any(test, debug_assertions)))]
 const COINBASE_MATURITY: u32 = 100;
+#[cfg(any(test, debug_assertions))]
+const COINBASE_MATURITY: u32 = 1;
 
 /// A Bitcoin wallet
 ///
@@ -486,6 +489,7 @@ where
             // None means database was never synced
             None => return Ok(Balance::default()),
         };
+        debug!("using coinbase maturity {}", COINBASE_MATURITY);
         for u in utxos {
             // Unwrap used since utxo set is created from database
             let tx = database
