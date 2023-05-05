@@ -44,6 +44,7 @@ use bitcoincore_rpc::json::{
     ImportMultiRequestScriptPubkey, ImportMultiRescanSince, ListTransactionResult,
     ListUnspentResultEntry, ScanningDetails,
 };
+use bitcoincore_rpc::jsonrpc;
 use bitcoincore_rpc::jsonrpc::serde_json::{json, Value};
 use bitcoincore_rpc::Auth as RpcAuth;
 use bitcoincore_rpc::{Client, RpcApi};
@@ -215,7 +216,24 @@ impl ConfigurableBlockchain for RpcBlockchain {
     fn from_config(config: &Self::Config) -> Result<Self, Error> {
         let wallet_url = format!("{}/wallet/{}", config.url, &config.wallet_name);
 
-        let client = Client::new(wallet_url.as_str(), config.auth.clone().into())?;
+        // :note there's a stupid nesting of Auth types that makes this a fucking nuisance.
+        let client =
+            if let Auth::UserPass{username, password} = &config.auth {
+                let timeout = Duration::from_secs(600);
+                debug!("using rpc client with timeout {:?}", timeout);
+                let jsclient = jsonrpc::Client::with_transport(
+                    jsonrpc::simple_http::Builder::new()
+                        .url(wallet_url.as_str())
+                        .map_err(|e| Error::Generic(format!("bad url: {}", e).to_owned()))?
+                        .auth(username, Some(password))
+                        .timeout(timeout)
+                        .build()
+                        );
+                Client::from_jsonrpc(jsclient)
+            } else {
+                debug!("using normal rpc client with short timeout");
+                Client::new(wallet_url.as_str(), config.auth.clone().into())?
+            };
         let rpc_version = client.version()?;
 
         info!("connected to '{}' with auth: {:?}", wallet_url, config.auth);
