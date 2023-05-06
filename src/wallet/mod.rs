@@ -73,10 +73,7 @@ use crate::types::*;
 use crate::wallet::coin_selection::Excess::{Change, NoChange};
 
 const CACHE_ADDR_BATCH_SIZE: u32 = 100;
-#[cfg(not(any(test, debug_assertions)))]
 const COINBASE_MATURITY: u32 = 100;
-#[cfg(any(test, debug_assertions))]
-const COINBASE_MATURITY: u32 = 1;
 
 /// A Bitcoin wallet
 ///
@@ -489,7 +486,16 @@ where
             // None means database was never synced
             None => return Ok(Balance::default()),
         };
-        debug!("using coinbase maturity {}", COINBASE_MATURITY);
+
+        let coinbase_maturity = if cfg!(any(test, debug_assertions)) {
+            let m = std::env::var("JUNO_COINBASE_MATURITY")
+                .map(|v| v.parse().expect("malformed JUNO_COINBASE_MATURITY"))
+                .unwrap_or(1);
+            debug!("using coinbase maturity {}", m);
+            m
+        } else {
+            COINBASE_MATURITY
+        };
         for u in utxos {
             // Unwrap used since utxo set is created from database
             let tx = database
@@ -497,7 +503,7 @@ where
                 .expect("Transaction not found in database");
             if let Some(tx_conf_time) = &tx.confirmation_time {
                 if tx.transaction.expect("No transaction").is_coin_base()
-                    && (last_sync_height - tx_conf_time.height) < COINBASE_MATURITY
+                    && (last_sync_height - tx_conf_time.height) < coinbase_maturity
                 {
                     immature += u.txout.value;
                 } else {
